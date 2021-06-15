@@ -47,8 +47,6 @@ object Main {
     fun main(args: Array<String>) {
         val dbUri = URI(System.getenv("DATABASE_URL"))
 
-        println(System.getenv("DATABASE_URL"))
-
         Database.connect(
             url = "jdbc:postgresql://${dbUri.host}:${dbUri.port}${dbUri.path}",
             driver = "org.postgresql.Driver",
