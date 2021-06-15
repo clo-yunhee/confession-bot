@@ -13,18 +13,52 @@ import discord4j.discordjson.json.*
 import discord4j.discordjson.json.gateway.StatusUpdate
 import discord4j.rest.util.Color
 import discord4j.rest.util.Image
+import org.jetbrains.exposed.dao.IntEntity
+import org.jetbrains.exposed.dao.IntEntityClass
+import org.jetbrains.exposed.dao.LongEntity
+import org.jetbrains.exposed.dao.id.EntityID
+import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.dao.id.LongIdTable
+import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.transactions.transaction
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import java.lang.NullPointerException
 import java.lang.RuntimeException
+import java.net.URI
 import kotlin.random.Random
 
 object Main {
 
     private const val DEFAULT_GUILD_ICON_URL = "https://discord.com/assets/3437c10597c1526c3dbd98c737c2bcae.svg"
 
+    object Counters : IntIdTable() {
+        val channelId = long("channel_id").uniqueIndex()
+        val counter = integer("counter")
+    }
+
+    class Counter(id: EntityID<Int>) : IntEntity(id) {
+        companion object : IntEntityClass<Counter>(Counters)
+        var channelId by Counters.channelId
+        var counter   by Counters.counter
+    }
+
     @JvmStatic
     fun main(args: Array<String>) {
+        val dbUri = URI(System.getenv("DATABASE_URL"))
+
+        println(System.getenv("DATABASE_URL"))
+
+        Database.connect(
+            url = "jdbc:postgresql://${dbUri.host}:${dbUri.port}${dbUri.path}",
+            driver = "org.postgresql.Driver",
+            user = dbUri.userInfo.split(':')[0],
+            password = dbUri.userInfo.split(':')[1])
+
+        transaction {
+            SchemaUtils.create (Counters)
+        }
+
         val token = System.getenv("DISCORD_TOKEN")
         val commandName = System.getenv("COMMAND_NAME")
         val channelId = Snowflake.of(System.getenv("CHANNEL_ID"))
@@ -49,9 +83,23 @@ object Main {
                     EmbedData.builder().run {
                         val guild = channel.guild.block() ?: throw Exception("Couldn't instantiate guild for channel $channelId")
 
+                        val number = transaction {
+                            val counter = Counter.find { Counters.channelId eq channelId.asLong() }
+                            if (counter.empty()) {
+                                Counter.new {
+                                    this.channelId = channelId.asLong()
+                                    this.counter = 1
+                                }
+                                return@transaction 1
+                            }
+                            else {
+                                return@transaction ++counter.first().counter
+                            }
+                        }
+
                         author(EmbedAuthorData.builder()
                             .iconUrl(guild.getIconUrl(Image.Format.WEB_P).orElse(DEFAULT_GUILD_ICON_URL))
-                            .name("Anonymous confession")
+                            .name("Anonymous confession #$number")
                             .build())
 
                         color(Color.of(
