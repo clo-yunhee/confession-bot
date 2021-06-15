@@ -1,5 +1,8 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ConfigureShadowRelocation
+
 plugins {
     id 'org.jetbrains.kotlin.jvm' version '1.4.32'
+    id 'com.github.johnrengelman.shadow' version '7.0.0'
 }
 
 group 'fr.cloyunhee.confessionbot'
@@ -10,10 +13,12 @@ repositories {
 }
 
 dependencies {
+    shadow localGroovy()
+    shadow gradleApi()
+
     implementation "org.jetbrains.kotlin:kotlin-stdlib"
     implementation 'com.discord4j:discord4j-core:3.1.5'
     implementation 'ch.qos.logback:logback-classic:1.2.3'
-
 }
 
 compileKotlin {
@@ -27,10 +32,24 @@ compileKotlin {
     }
 }
 
-task copyToLib(type: Copy) {
-    into "$buildDir/libs"
-    from(configurations.compile)
+jar {
+    manifest {
+        attributes 'Main-Class': 'fr.cloyunhee.confessionbot.Main'
+    }
 }
 
-task stage(dependsOn: ['build', 'clean', 'copyToLib'])
+task relocateShadowJar(type: ConfigureShadowRelocation) {
+    target = tasks.shadowJar
+}
+
+tasks.shadowJar.dependsOn tasks.relocateShadowJar
+
+task stage(dependsOn: ['build', 'clean', 'shadowJar'])
 build.mustRunAfter clean
+
+gradle.taskGraph.whenReady {
+    taskGraph ->
+        if (taskGraph.hasTask(stage)) {
+            test.enabled = false
+        }
+}
