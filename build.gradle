@@ -26,3 +26,11 @@ compileKotlin {
         languageVersion = "1.4"
     }
 }
+
+task copyToLib(type: Copy) {
+    into "$buildDir/libs"
+    from(configurations.compile)
+}
+
+task stage(dependsOn: ['build', 'clean', 'copyToLib'])
+build.mustRunAfter clean
